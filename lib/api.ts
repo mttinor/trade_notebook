@@ -2,6 +2,15 @@
 
 import type { Journal, Profile } from "./types";
 
+// تبدیل ارقام فارسی/عربی به انگلیسی و حذف بقیه کاراکترها (حداکثر ۸ رقم)
+export function onlyDigits(v: string, max = 8): string {
+  return v
+    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/\D/g, "")
+    .slice(0, max);
+}
+
 const pinKey = (id: string) => `nt-pin:${id}`;
 
 export function getPin(id: string): string | null {

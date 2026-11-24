@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Day, Journal, Profile, Settings } from "@/lib/types";
 import { DEFAULT_SETTINGS } from "@/lib/types";
-import { api, setPin } from "@/lib/api";
+import { api, onlyDigits, setPin } from "@/lib/api";
 import { downloadBlob, exportExcel, importExcel, toLatinDigits, type ImportResult } from "@/lib/excel";
 
 interface Props {
@@ -152,7 +152,7 @@ export default function SettingsPanel({ journal, profile, update, onProfile, onD
           <div className="mt-2 border-t border-line pt-4">
             <span className="label">{profile.hasPin ? "تغییر رمز" : "گذاشتن رمز"}</span>
             <div className="flex flex-wrap gap-2">
-              <input className="input num w-40" type="password" inputMode="numeric" maxLength={8} placeholder="۴ تا ۸ رقم" value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))} />
+              <input className="input num w-40" type="password" inputMode="numeric" maxLength={8} placeholder="۴ تا ۸ رقم" value={newPin} onChange={(e) => setNewPin(onlyDigits(e.target.value))} />
               <button className="btn-ghost" disabled={newPin.length < 4} onClick={() => saveProfile(newPin)}>ثبت رمز</button>
               {profile.hasPin && <button className="btn-danger" onClick={() => saveProfile(null)}>برداشتن رمز</button>}
             </div>

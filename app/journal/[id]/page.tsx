@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { api, ApiError, setPin } from "@/lib/api";
+import { api, ApiError, onlyDigits, setPin } from "@/lib/api";
 import type { Journal, Profile } from "@/lib/types";
 import { buildRows, summarize } from "@/lib/stats";
 import Dashboard from "@/components/Dashboard";
@@ -111,7 +111,7 @@ export default function JournalPage() {
       <main className="grid min-h-dvh place-items-center p-4">
         <form onSubmit={submitPin} className="card w-full max-w-sm p-5">
           <h1 className="mb-4 font-bold">این ژورنال رمز دارد</h1>
-          <input autoFocus className="input num w-full" type="password" inputMode="numeric" value={pinValue} onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ""))} />
+          <input autoFocus className="input num w-full" type="password" inputMode="numeric" value={pinValue} onChange={(e) => setPinValue(onlyDigits(e.target.value))} />
           <div className="mt-4 flex gap-2">
             <button className="btn-primary flex-1">ورود</button>
             <Link href="/" className="btn-ghost">بازگشت</Link>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, ApiError, setPin } from "@/lib/api";
+import { api, ApiError, onlyDigits, setPin } from "@/lib/api";
 import type { Profile } from "@/lib/types";
 
 export default function Home() {
@@ -118,7 +118,7 @@ export default function Home() {
               </div>
               <div>
                 <label className="label" htmlFor="pin">رمز (اختیاری)</label>
-                <input id="pin" className="input num w-full" inputMode="numeric" type="password" maxLength={8} value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "") })} placeholder="۴ تا ۸ رقم" />
+                <input id="pin" className="input num w-full" inputMode="numeric" type="password" maxLength={8} value={form.pin} onChange={(e) => setForm({ ...form, pin: onlyDigits(e.target.value) })} placeholder="۴ تا ۸ رقم" />
               </div>
             </div>
             {error && <p className="text-sm text-sl">{error}</p>}
@@ -132,7 +132,7 @@ export default function Home() {
           <form onSubmit={submitPin} onClick={(e) => e.stopPropagation()} className="card w-full max-w-sm p-5">
             <h3 className="mb-1 font-bold">ورود به ژورنال {pinFor.name}</h3>
             <p className="mb-4 text-sm text-mute">این ژورنال رمز دارد.</p>
-            <input autoFocus className="input num w-full" type="password" inputMode="numeric" value={pinValue} onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ""))} />
+            <input autoFocus className="input num w-full" type="password" inputMode="numeric" value={pinValue} onChange={(e) => setPinValue(onlyDigits(e.target.value))} />
             {pinError && <p className="mt-2 text-sm text-sl">{pinError}</p>}
             <div className="mt-4 flex gap-2">
               <button className="btn-primary flex-1">ورود</button>
