@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* ژورنال معاملاتی — رنگ‌ها و توکن‌ها */
+@theme {
+  --font-sans: "Vazirmatn", ui-sans-serif, system-ui, Tahoma, sans-serif;
+  --color-bg: #f4f4f1;
+  --color-card: #ffffff;
+  --color-line: #e3e3de;
+  --color-ink: #141414;
+  --color-mute: #6b6b66;
+  --color-tp: #12805c;
+  --color-sl: #d0343a;
+  --color-rf: #6f7a86;
+  --color-hl: #ffd60a;
+  --color-hl-ink: #1d1a00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0e0f11;
+    --color-card: #17191c;
+    --color-line: #2a2d31;
+    --color-ink: #ececea;
+    --color-mute: #9a9c9f;
+    --color-tp: #2fbf8a;
+    --color-sl: #f0565c;
+    --color-rf: #8f99a4;
+  }
+}
+
+html { color-scheme: light dark; }
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01";
+}
+.num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; display: inline-block; }
+
+@utility card { @apply rounded-2xl border border-line bg-card; }
+@utility btn { @apply inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink disabled:cursor-not-allowed disabled:opacity-50; }
+@utility btn-primary { @apply btn bg-ink text-bg hover:opacity-90; }
+@utility btn-ghost { @apply btn border border-line bg-card hover:bg-bg; }
+@utility btn-danger { @apply btn border border-sl/40 text-sl hover:bg-sl/10; }
+@utility input { @apply min-h-11 w-full rounded-xl border border-line bg-card px-3 text-base text-ink outline-none focus:border-ink; }
+@utility label { @apply mb-1 block text-sm text-mute; }
+@utility th { @apply whitespace-nowrap px-3 py-2 text-start text-xs font-medium text-mute; }
+@utility td { @apply whitespace-nowrap border-t border-line px-3 py-2 text-sm; }
