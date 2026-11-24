@@ -3,41 +3,113 @@ import path from "path";
 import crypto from "crypto";
 import { DEFAULT_SETTINGS, emptyJournal, type Journal, type Profile, type StoredProfile } from "./types";
 
-// ذخیره‌سازی ساده روی فایل JSON (بدون نیاز به دیتابیس).
-// مسیر را می‌توان با متغیر محیطی DATA_DIR عوض کرد.
+// ─────────────────────────────────────────────────────────────
+// لایه ذخیره‌سازی
+// - اگر متغیرهای Upstash Redis تنظیم شده باشند (مثلاً روی Vercel)،
+//   داده‌ها در Redis ذخیره می‌شوند (از طریق REST، بدون پکیج اضافه).
+// - در غیر این صورت روی فایل JSON در پوشه DATA_DIR (پیش‌فرض: ./data).
+// روی Vercel فایل‌سیستم فقط‌خواندنی و موقت است، پس آنجا حتماً Redis لازم است.
+// ─────────────────────────────────────────────────────────────
+
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+const KEY_PREFIX = process.env.STORE_PREFIX || "notebook-trade";
+
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
-const PROFILES_FILE = path.join(DATA_DIR, "profiles.json");
-const JOURNAL_DIR = path.join(DATA_DIR, "journals");
+
+// کلیدها با مسیر فایل‌های قبلی یکی هستند: data/profiles.json و data/journals/<id>.json
+const PROFILES_KEY = "profiles";
+const journalKey = (id: string) => `journals/${id}`;
+
+interface Backend {
+  get<T>(key: string, fallback: T): Promise<T>;
+  set(key: string, data: unknown): Promise<void>;
+  del(key: string): Promise<void>;
+}
+
+// ---------- Upstash Redis (REST) ----------
+function redisBackend(url: string, token: string): Backend {
+  async function cmd(args: string[]) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(args),
+      cache: "no-store",
+    });
+    const json = (await res.json().catch(() => ({}))) as { result?: unknown; error?: string };
+    if (!res.ok || json.error) throw new Error(`Redis error: ${json.error ?? res.status}`);
+    return json.result;
+  }
+  const k = (key: string) => `${KEY_PREFIX}:${key}`;
+  return {
+    async get<T>(key: string, fallback: T) {
+      const raw = await cmd(["GET", k(key)]);
+      if (typeof raw !== "string") return fallback;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return fallback;
+      }
+    },
+    async set(key, data) {
+      await cmd(["SET", k(key), JSON.stringify(data)]);
+    },
+    async del(key) {
+      await cmd(["DEL", k(key)]);
+    },
+  };
+}
+
+// ---------- فایل JSON ----------
+function fileBackend(): Backend {
+  const fileOf = (key: string) => path.join(DATA_DIR, `${key}.json`);
+  const queues = new Map<string, Promise<void>>();
+  return {
+    async get<T>(key: string, fallback: T) {
+      try {
+        return JSON.parse(await fs.readFile(fileOf(key), "utf8")) as T;
+      } catch {
+        return fallback;
+      }
+    },
+    // نوشتن اتمیک + صف نوشتن برای جلوگیری از تداخل
+    async set(key, data) {
+      const file = fileOf(key);
+      const prev = queues.get(file) ?? Promise.resolve();
+      const next = prev
+        .catch(() => undefined)
+        .then(async () => {
+          await fs.mkdir(path.dirname(file), { recursive: true });
+          const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
+          await fs.writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
+          await fs.rename(tmp, file);
+        });
+      queues.set(file, next);
+      return next;
+    },
+    async del(key) {
+      await fs.rm(fileOf(key), { force: true });
+    },
+  };
+}
+
+function pickBackend(): Backend {
+  if (REDIS_URL && REDIS_TOKEN) return redisBackend(REDIS_URL, REDIS_TOKEN);
+  if (process.env.VERCEL) {
+    throw new Error(
+      "روی Vercel امکان ذخیره روی فایل نیست. یک دیتابیس Upstash Redis وصل کنید و " +
+        "UPSTASH_REDIS_REST_URL و UPSTASH_REDIS_REST_TOKEN (یا KV_REST_API_URL و KV_REST_API_TOKEN) را تنظیم کنید."
+    );
+  }
+  return fileBackend();
+}
+
+let backend: Backend | null = null;
+const db = () => (backend ??= pickBackend());
+
+// ─────────────────────────────────────────────────────────────
 
 const ID_RE = /^[a-z0-9]{6,32}$/;
-
-async function ensureDirs() {
-  await fs.mkdir(JOURNAL_DIR, { recursive: true });
-}
-
-async function readJSON<T>(file: string, fallback: T): Promise<T> {
-  try {
-    return JSON.parse(await fs.readFile(file, "utf8")) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-// نوشتن اتمیک + صف نوشتن برای جلوگیری از تداخل
-const queues = new Map<string, Promise<void>>();
-async function writeJSON(file: string, data: unknown) {
-  await ensureDirs();
-  const prev = queues.get(file) ?? Promise.resolve();
-  const next = prev
-    .catch(() => undefined)
-    .then(async () => {
-      const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-      await fs.writeFile(tmp, JSON.stringify(data, null, 2), "utf8");
-      await fs.rename(tmp, file);
-    });
-  queues.set(file, next);
-  return next;
-}
 
 function hashPin(pin: string, salt: string) {
   return crypto.scryptSync(pin, salt, 32).toString("hex");
@@ -52,7 +124,7 @@ export function validId(id: string) {
 }
 
 async function allStored(): Promise<StoredProfile[]> {
-  return readJSON<StoredProfile[]>(PROFILES_FILE, []);
+  return db().get<StoredProfile[]>(PROFILES_KEY, []);
 }
 
 export async function listProfiles(): Promise<Profile[]> {
@@ -78,10 +150,10 @@ export async function createProfile(input: { name: string; title?: string; pin?:
     p.pinHash = hashPin(input.pin, p.pinSalt);
   }
   list.push(p);
-  await writeJSON(PROFILES_FILE, list);
+  await db().set(PROFILES_KEY, list);
   const j = emptyJournal(id);
   if (input.initialBalance && input.initialBalance > 0) j.settings.initialBalance = input.initialBalance;
-  await writeJSON(path.join(JOURNAL_DIR, `${id}.json`), j);
+  await db().set(journalKey(id), j);
   return toPublic(p);
 }
 
@@ -98,14 +170,14 @@ export async function updateProfile(id: string, patch: { name?: string; title?: 
     p.pinSalt = crypto.randomBytes(8).toString("hex");
     p.pinHash = hashPin(patch.pin, p.pinSalt);
   }
-  await writeJSON(PROFILES_FILE, list);
+  await db().set(PROFILES_KEY, list);
   return toPublic(p);
 }
 
 export async function deleteProfile(id: string) {
   const list = await allStored();
-  await writeJSON(PROFILES_FILE, list.filter((x) => x.id !== id));
-  await fs.rm(path.join(JOURNAL_DIR, `${id}.json`), { force: true });
+  await db().set(PROFILES_KEY, list.filter((x) => x.id !== id));
+  await db().del(journalKey(id));
 }
 
 export async function checkPin(id: string, pin: string | null): Promise<boolean> {
@@ -119,7 +191,7 @@ export async function checkPin(id: string, pin: string | null): Promise<boolean>
 }
 
 export async function getJournal(id: string): Promise<Journal> {
-  const j = await readJSON<Journal | null>(path.join(JOURNAL_DIR, `${id}.json`), null);
+  const j = await db().get<Journal | null>(journalKey(id), null);
   if (!j) return emptyJournal(id);
   // سازگاری با نسخه‌های قبلی تنظیمات
   j.settings = { ...DEFAULT_SETTINGS, ...j.settings, risk: { ...DEFAULT_SETTINGS.risk, ...(j.settings?.risk ?? {}) } };
@@ -129,6 +201,6 @@ export async function getJournal(id: string): Promise<Journal> {
 
 export async function saveJournal(id: string, journal: Journal) {
   const clean: Journal = { ...journal, profileId: id, updatedAt: new Date().toISOString() };
-  await writeJSON(path.join(JOURNAL_DIR, `${id}.json`), clean);
+  await db().set(journalKey(id), clean);
   return clean;
 }
