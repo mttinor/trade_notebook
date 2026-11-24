@@ -48,9 +48,8 @@ async function req<T>(url: string, init: RequestInit = {}, id?: string): Promise
 }
 
 export const api = {
-  listProfiles: () => req<Profile[]>("/api/profiles"),
-  createProfile: (body: { name: string; title?: string; pin?: string; initialBalance?: number }) =>
-    req<Profile>("/api/profiles", { method: "POST", body: JSON.stringify(body) }),
+  login: (body: { name: string; pin: string; initialBalance?: number }) =>
+    req<Profile & { created: boolean }>("/api/profiles", { method: "POST", body: JSON.stringify(body) }),
   load: (id: string) => req<{ profile: Profile; journal: Journal }>(`/api/profiles/${id}`, {}, id),
   save: (id: string, journal: Journal) =>
     req<{ ok: true; updatedAt: string }>(`/api/profiles/${id}`, { method: "PUT", body: JSON.stringify(journal) }, id),

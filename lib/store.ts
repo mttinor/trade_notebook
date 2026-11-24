@@ -157,6 +157,39 @@ export async function createProfile(input: { name: string; title?: string; pin?:
   return toPublic(p);
 }
 
+// یکسان‌سازی نام برای پیدا کردن کاربر (فاصله‌ها، حروف بزرگ/کوچک، ی/ک عربی، نیم‌فاصله)
+export function normalizeName(name: string) {
+  return name
+    .replace(/[‌‏‎]/g, " ")
+    .replace(/ي/g, "ی")
+    .replace(/ك/g, "ک")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+export type LoginResult =
+  | { status: "ok"; profile: Profile; created: boolean }
+  | { status: "wrong-pin" };
+
+// ورود با نام + رمز. اگر این نام وجود نداشته باشد، ژورنال جدید ساخته می‌شود.
+export async function loginOrCreate(input: { name: string; pin: string; initialBalance?: number }): Promise<LoginResult> {
+  const key = normalizeName(input.name);
+  const list = await allStored();
+  const existing = list.find((x) => normalizeName(x.name) === key);
+  if (!existing) {
+    const profile = await createProfile({ name: input.name, pin: input.pin, initialBalance: input.initialBalance });
+    return { status: "ok", profile, created: true };
+  }
+  // ژورنال‌های قدیمی بدون رمز: رمز واردشده برایشان ثبت می‌شود
+  if (!existing.pinHash || !existing.pinSalt) {
+    const profile = await updateProfile(existing.id, { pin: input.pin });
+    return { status: "ok", profile: profile!, created: false };
+  }
+  const ok = await checkPin(existing.id, input.pin);
+  return ok ? { status: "ok", profile: toPublic(existing), created: false } : { status: "wrong-pin" };
+}
+
 export async function updateProfile(id: string, patch: { name?: string; title?: string; pin?: string | null }) {
   const list = await allStored();
   const p = list.find((x) => x.id === id);
